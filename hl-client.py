@@ -107,7 +107,10 @@ def start(message):
     elif message.text.startswith("/state"):
         send_hldm_state_for_user(message)
     else:
-        bot.send_message(message.chat.id, "HalfLife DM state checking bot")
+        bot.send_message(
+            message.chat.id, 
+            "Game state checking bot. To check Source and GoldSource servers (Half-Life, Half-Life 2, Team Fortress 2, Counter-Strike 1.6, Counter-Strike: Global Offensive, ARK: Survival Evolved, Rust)"
+        )
 
 def register_server(message):
     parts = message.text.split()[1:]
@@ -135,7 +138,7 @@ def get_name(message):
         data['server'] = message.text
 
     bot.set_state(message.from_user.id, MyStates.port, message.chat.id)    
-    bot.send_message(message.chat.id, 'Port? [default=27015]')
+    bot.send_message(message.chat.id, 'Port? [default=27015 for HL]')
 
 @bot.message_handler(state=MyStates.port, is_digit=True)
 def get_port(message):
