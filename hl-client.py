@@ -11,7 +11,7 @@ import datetime
 
 load_dotenv()
 token = os.environ.get('BOT_TOKEN')
-period = int(os.environ.get('BOT_PERIOD', default='180'))  # in seconds
+period = int(os.environ.get('BOT_PERIOD', default='42'))  # in seconds
 
 state_storage = StateMemoryStorage()  # replace with Redis?
 bot = telebot.TeleBot(token, state_storage=state_storage)
