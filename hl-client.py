@@ -9,12 +9,6 @@ import threading
 import asyncio
 import datetime
 
-load_dotenv()
-token = os.environ.get('BOT_TOKEN')
-period = int(os.environ.get('BOT_PERIOD', default='42'))  # in seconds
-
-state_storage = StateMemoryStorage()  # replace with Redis?
-bot = telebot.TeleBot(token, state_storage=state_storage)
 
 class MyStates(StatesGroup):
     server = State()
@@ -43,6 +37,14 @@ class UserSettings:
   def __init__(self, chat_id):
     self.chat_id = chat_id
 
+
+load_dotenv()
+token = os.environ.get('BOT_TOKEN')
+period = int(os.environ.get('BOT_PERIOD', default='42'))  # in seconds
+
+state_storage = StateMemoryStorage()  # replace with Redis?
+bot = telebot.TeleBot(token, state_storage=state_storage)
+
 settings_per_user = {}
 
 def get_settings(message) -> UserSettings:
@@ -65,25 +67,27 @@ def get_server_state(connection_info) -> ServerData:
 
 
 def check_server_state(server_data: ServerData):
-    print('Check state: {}'.format(server_data.connection_info))
     server_data.last_check_time = datetime.datetime.now()
     server, _ = server_data.connection_info
-    try:
-        state = a2s.info(server_data.connection_info)
-        server_data.last_state = state
-        server_data.alive = True
-        server_data.last_state_message = "Server {} [{}] has {} players".format(server, state.map_name, state.player_count)
-        server_data.last_check_passed_time = datetime.datetime.now()
-    except Exception as err:
-        server_data.alive = False
-        server_data.last_state_message = "Server {} check failed. Last time seen {}".format(server, server_data.last_check_passed_time)
-        print(err)
-        return False
-    finally:
-        print(server_data.last_state_message)
-    
-    return True
-    
+    retry_num = 0
+    while retry_num < 3:
+        retry_num += 1
+        print('Check state: {} iter {}'.format(server_data.connection_info, retry_num))
+        try:
+            state = a2s.info(server_data.connection_info, timeout=15)
+            server_data.last_state = state
+            server_data.alive = True
+            server_data.last_state_message = "Server {} [{} on '{}'] has {} players".format(server, state.game, state.map_name, state.player_count)
+            server_data.last_check_passed_time = datetime.datetime.now()
+            return True
+        except Exception as err:
+            server_data.alive = False
+            server_data.last_state_message = "Server {} check failed. Last time seen {}".format(server, server_data.last_check_passed_time)
+            print(err)
+        finally:
+            print(server_data.last_state_message)
+
+    return False
 
 def reply_server_state_for_user(message):
     user_settings = get_settings(message)
@@ -203,6 +207,7 @@ def start_bot_processing():
     bot.add_custom_filter(custom_filters.StateFilter(bot))
     bot.add_custom_filter(custom_filters.IsDigitFilter())
     bot.infinity_polling(skip_pending=True)
+
 
 if __name__ == "__main__":
     start_server_state_scheduler()
