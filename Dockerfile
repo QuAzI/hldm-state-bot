@@ -23,4 +23,4 @@ RUN pip install --no-cache /wheels/*
 
 COPY ./hl-client.py .
 
-ENTRYPOINT ["python", "hl-client.py"]
+ENTRYPOINT ["python", "-u", "hl-client.py"]

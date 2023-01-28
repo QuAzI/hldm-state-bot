@@ -120,18 +120,24 @@ def start(message):
 
 def load_settings():
     global settings_per_user
-    if os.path.exists('data/user_data.json'):
-        with open('data/user_data.json', 'r') as f:
-            settings_per_user = json.load(f)
+    try:
+        if os.path.exists('data/user_data.json'):
+            with open('data/user_data.json', 'r') as f:
+                settings_per_user = json.load(f)
+    except Exception as err:
+        print(err)
 
 def save_settings():
-    json_data = json.dumps(settings_per_user.__dict__)
+    try:
+        json_data = json.dumps(settings_per_user)
 
-    if not os.path.exists('data'):
-        os.makedirs('data')
+        if not os.path.exists('data'):
+            os.makedirs('data')
 
-    with open('data/user_data.json', 'w') as f:
-        f.write(json_data)
+        with open('data/user_data.json', 'w') as f:
+            f.write(json_data)
+    except Exception as err:
+        print(err)
 
 def register_server(message):
     parts = message.text.split()[1:]
@@ -146,7 +152,8 @@ def register_server(message):
             reply_server_state_for_user(message)
 
             save_settings()
-        except:
+        except Exception as err:
+            print(err)
             bot.send_message(message.chat.id, "Please check settings")
     elif message.chat.type == "private":
         bot.set_state(message.from_user.id, MyStates.server, message.chat.id)
@@ -176,7 +183,8 @@ def get_port(message):
 
         bot.delete_state(message.chat.id, message.chat.id)
         reply_server_state_for_user(message)
-    except:
+    except Exception as err:
+        print(err)
         bot.send_message(message.chat.id, 'Wrong port, try again')
 
 # Any state
