@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import typing
 import telebot
 from telebot import custom_filters
 from telebot.handler_backends import State, StatesGroup
@@ -8,6 +9,7 @@ import a2s
 import threading
 import asyncio
 import datetime
+import time
 import json
 
 class MyStates(StatesGroup):
@@ -45,8 +47,8 @@ period = int(os.environ.get('BOT_PERIOD', default='42'))  # in seconds
 state_storage = StateMemoryStorage()  # replace with Redis?
 bot = telebot.TeleBot(token, state_storage=state_storage)
 
-settings_per_user = {}
-server_states = {}
+settings_per_user: typing.Dict[str, UserSettings] = {}
+server_states: typing.Dict[str, ServerData] = {}
 
 
 def get_settings(message) -> UserSettings:
@@ -72,17 +74,22 @@ def check_server_state(server_data: ServerData):
     retry_num = 0
     while retry_num < 3:
         retry_num += 1
-        print('Check state: {} iter {}'.format(server_data.connection_info, retry_num))
+        if retry_num > 1:
+            time.sleep(5)
+            print('Check state: {} iter {}'.format(server_data.connection_info, retry_num))
+
         try:
             state = a2s.info(server_data.connection_info, timeout=15)
             server_data.last_state = state
             server_data.alive = True
-            server_data.last_state_message = "Server {} [{} on '{}'] has {} players".format(server, state.game, state.map_name, state.player_count)
+            server_data.last_state_message = "Server {} [{} on '{}'] has {} players".format(
+                server, state.game, state.map_name, state.player_count)
             server_data.last_check_passed_time = datetime.datetime.now()
             return True
         except Exception as err:
             server_data.alive = False
-            server_data.last_state_message = "Server {} check failed. Last time seen {}".format(server, server_data.last_check_passed_time)
+            server_data.last_state_message = "Server {} check failed. Last time seen {}".format(
+                server, server_data.last_check_passed_time)
             print(err)
         finally:
             print(server_data.last_state_message)
@@ -115,7 +122,9 @@ def start(message):
     else:
         bot.send_message(
             message.chat.id, 
-            "Game state checking bot. To check Source and GoldSource servers (Half-Life, Half-Life 2, Team Fortress 2, Counter-Strike 1.6, Counter-Strike: Global Offensive, ARK: Survival Evolved, Rust)"
+            "Game state checking bot. To check Source and GoldSource servers "
+            "(Half-Life, Half-Life 2, Team Fortress 2, Counter-Strike 1.6, "
+            "Counter-Strike: Global Offensive, ARK: Survival Evolved, Rust)"
         )
 
 def load_settings():
@@ -123,13 +132,22 @@ def load_settings():
     try:
         if os.path.exists('data/user_data.json'):
             with open('data/user_data.json', 'r') as f:
-                settings_per_user = json.load(f)
+                settings: dict[str, tuple] = json.load(f)
+                for chat_id, (server, port) in settings.items():
+                    user_settings = UserSettings(int(chat_id))
+                    settings_per_user[user_settings.chat_id] = user_settings
+
+                    connection_info = (server, port)
+                    server_state = get_server_state(connection_info)
+                    user_settings.server = server_state
     except Exception as err:
         print(err)
 
 def save_settings():
     try:
-        json_data = json.dumps(settings_per_user)
+        settings = { item.chat_id:item.server.connection_info
+                     for item in settings_per_user.values() }
+        json_data = json.dumps(settings)
 
         if not os.path.exists('data'):
             os.makedirs('data')
@@ -194,7 +212,7 @@ def any_state(message):
     bot.delete_state(message.chat.id, message.chat.id)
 
 def check_available_servers():
-    print('Check Servers cycle: {} servers'.format(len(server_states)))
+    print('Check Servers cycle: {} servers, {} users'.format(len(server_states), len(settings_per_user)))
     for server_data in server_states.values():
         check_server_state_and_notify(server_data)
 
