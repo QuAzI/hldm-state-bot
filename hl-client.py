@@ -24,7 +24,7 @@ class ServerData:
     last_check_time: datetime = None
     connection_info = None
     last_state = None
-    last_state_message: str = None
+    last_state_message: str | None = None
     last_check_passed_time: datetime = None
     alive: bool = False
 
@@ -42,7 +42,6 @@ class UserSettings:
 
   def __init__(self, chat_id):
     self.chat_id = chat_id
-    server = None
 
 settings_per_user = {}
 
@@ -65,33 +64,36 @@ def get_server_state(connection_info) -> ServerData:
     return state
 
 
-def check_hldm(serverData: ServerData):
-    serverData.last_check_time = datetime.datetime.now()
-    server, _ = serverData.connection_info
+def check_server_state(server_data: ServerData):
+    print('Check state: {}'.format(server_data.connection_info))
+    server_data.last_check_time = datetime.datetime.now()
+    server, _ = server_data.connection_info
     try:
-        state = a2s.info(serverData.connection_info)
-        serverData.last_state = state        
-        serverData.alive = True
-        serverData.last_state_message = "Server {} [{}] has {} players".format(server, state.map_name, state.player_count)
-        serverData.last_check_passed_time = datetime.datetime.now()
+        state = a2s.info(server_data.connection_info)
+        server_data.last_state = state
+        server_data.alive = True
+        server_data.last_state_message = "Server {} [{}] has {} players".format(server, state.map_name, state.player_count)
+        server_data.last_check_passed_time = datetime.datetime.now()
     except Exception as err:
-        serverData.alive = False
-        serverData.last_state_message = "Server {} check failed. Last time seen {}".format(server, serverData.last_check_passed_time)
+        server_data.alive = False
+        server_data.last_state_message = "Server {} check failed. Last time seen {}".format(server, server_data.last_check_passed_time)
         print(err)
         return False
+    finally:
+        print(server_data.last_state_message)
     
     return True
     
 
-def send_hldm_state_for_user(message):
+def reply_server_state_for_user(message):
     user_settings = get_settings(message)
     if user_settings and user_settings.server:
         server_data = user_settings.server
 
         prev_state = server_data.last_state_message
-        check_hldm(server_data)
+        check_server_state(server_data)
         if prev_state != server_data.last_state_message and prev_state is not None:
-            sendNewServerStateForSubscribers(server_data)
+            send_new_server_state_for_subscribers(server_data)
         else:
            bot.send_message(
                message.chat.id,
@@ -105,7 +107,7 @@ def start(message):
     if message.text.startswith('/reg'):
         register_server(message)
     elif message.text.startswith("/state"):
-        send_hldm_state_for_user(message)
+        reply_server_state_for_user(message)
     else:
         bot.send_message(
             message.chat.id, 
@@ -118,11 +120,11 @@ def register_server(message):
         try:
             user_settings = get_settings(message)
             connection_info = (parts[0], int(parts[1]))
-            serverState = get_server_state(connection_info)            
-            user_settings.server = serverState
+            server_state = get_server_state(connection_info)
+            user_settings.server = server_state
 
             bot.delete_state(message.chat.id, message.chat.id)
-            send_hldm_state_for_user(message)
+            reply_server_state_for_user(message)
         except:
             bot.send_message(message.chat.id, "Please check settings")
     elif message.chat.type == "private":
@@ -148,12 +150,12 @@ def get_port(message):
             
             user_settings = get_settings(message)
             connection_info = (data['server'], data['port'])
-            serverState = get_server_state(connection_info)            
-            user_settings.server = serverState
+            server_state = get_server_state(connection_info)
+            user_settings.server = server_state
 
         bot.delete_state(message.chat.id, message.chat.id)
-        send_hldm_state_for_user(message)
-    except Exception:
+        reply_server_state_for_user(message)
+    except:
         bot.send_message(message.chat.id, 'Wrong port, try again')
 
 # Any state
@@ -162,22 +164,23 @@ def any_state(message):
     bot.send_message(message.chat.id, "Your state was cancelled.")
     bot.delete_state(message.chat.id, message.chat.id)
 
-def checkAvailableServers():
-    print('Check Servers cycle')
+def check_available_servers():
+    print('Check Servers cycle: {} servers'.format(len(server_states)))
     for server_data in server_states.values():
-        checkServersState(server_data)
+        check_server_state_and_notify(server_data)
 
-def checkServersState(server_data: ServerData):
+def check_server_state_and_notify(server_data: ServerData):
     try:
         print('Check state {}'.format(server_data.connection_info))
         prev_state = server_data.last_state_message
-        check_hldm(server_data)
+        check_server_state(server_data)
         if prev_state != server_data.last_state_message:
-            sendNewServerStateForSubscribers(server_data)
+            send_new_server_state_for_subscribers(server_data)
     except Exception as err:
         print(err)
 
-def sendNewServerStateForSubscribers(server_data: ServerData):
+def send_new_server_state_for_subscribers(server_data: ServerData):
+    print('Send state {} {}'.format(server_data.connection_info, server_data.last_state_message))
     for chat_id, chat_settings in settings_per_user.items():
         if chat_settings.server is server_data:
             bot.send_message(
@@ -185,22 +188,22 @@ def sendNewServerStateForSubscribers(server_data: ServerData):
                 server_data.last_state_message
             )
 
-async def serverStateCycle():
+async def server_state_cycle():
     while True:
-        checkAvailableServers()
+        check_available_servers()
         await asyncio.sleep(period)
 
-def startScheduler():
+def start_server_state_scheduler():
     print('Scheduler')
-    serverStateThread = threading.Thread(target=asyncio.run, args=(serverStateCycle(),))
-    serverStateThread.start()
+    server_state_thread = threading.Thread(target=asyncio.run, args=(server_state_cycle(),))
+    server_state_thread.start()
 
-def startBotProcessing():
+def start_bot_processing():
     print('Bot messages processor')
     bot.add_custom_filter(custom_filters.StateFilter(bot))
     bot.add_custom_filter(custom_filters.IsDigitFilter())
     bot.infinity_polling(skip_pending=True)
 
 if __name__ == "__main__":
-    startScheduler()
-    startBotProcessing()
+    start_server_state_scheduler()
+    start_bot_processing()
