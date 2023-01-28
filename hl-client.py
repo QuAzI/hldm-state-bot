@@ -8,7 +8,7 @@ import a2s
 import threading
 import asyncio
 import datetime
-
+import json
 
 class MyStates(StatesGroup):
     server = State()
@@ -46,6 +46,8 @@ state_storage = StateMemoryStorage()  # replace with Redis?
 bot = telebot.TeleBot(token, state_storage=state_storage)
 
 settings_per_user = {}
+server_states = {}
+
 
 def get_settings(message) -> UserSettings:
     user_settings = settings_per_user.get(message.chat.id)
@@ -54,8 +56,6 @@ def get_settings(message) -> UserSettings:
         settings_per_user[message.chat.id] = user_settings
 
     return user_settings
-
-server_states = {}
 
 def get_server_state(connection_info) -> ServerData:
     state = server_states.get(connection_info)
@@ -118,6 +118,21 @@ def start(message):
             "Game state checking bot. To check Source and GoldSource servers (Half-Life, Half-Life 2, Team Fortress 2, Counter-Strike 1.6, Counter-Strike: Global Offensive, ARK: Survival Evolved, Rust)"
         )
 
+def load_settings():
+    global settings_per_user
+    if os.path.exists('data/user_data.json'):
+        with open('data/user_data.json', 'r') as f:
+            settings_per_user = json.load(f)
+
+def save_settings():
+    json_data = json.dumps(settings_per_user.__dict__)
+
+    if not os.path.exists('data'):
+        os.makedirs('data')
+
+    with open('data/user_data.json', 'w') as f:
+        f.write(json_data)
+
 def register_server(message):
     parts = message.text.split()[1:]
     if len(parts) == 2:
@@ -129,6 +144,8 @@ def register_server(message):
 
             bot.delete_state(message.chat.id, message.chat.id)
             reply_server_state_for_user(message)
+
+            save_settings()
         except:
             bot.send_message(message.chat.id, "Please check settings")
     elif message.chat.type == "private":
@@ -210,5 +227,6 @@ def start_bot_processing():
 
 
 if __name__ == "__main__":
+    load_settings()
     start_server_state_scheduler()
     start_bot_processing()
