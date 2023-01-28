@@ -11,11 +11,13 @@ Based on [python-a2s](https://github.com/Yepoleb/python-a2s) and should support 
 - ARK: Survival Evolved
 - Rust
 
+
 ## Commands
 
 `/reg hostname port` to set up server data
 
 `/state` to get state right now
+
 
 ## Settings
 
@@ -34,10 +36,66 @@ docker run --name hldm-state-bot -e BOT_TOKEN='AVAKADAKADABRA' -d hldm-state-bot
 
 Please ensure that only one bot work with the same token at one time!
 
+### Time between server state checks
+
+By the same way define `BOT_PERIOD`. By default 42 seconds
+
+
 ## Development prerequisites
 
 ```
 python -m virtualenv .venv
 .venv/Scripts/activate
 pip install -r .\requirements.txt
+```
+
+
+## Deployment
+
+Clone repo into some server directory, as example into `~/docker-server/hldm-state-bot`
+
+Create docker-compose.yml
+```yaml
+version: '3.9'
+
+services:
+  hldm-state-bot:
+    container_name: hldm-state-bot
+    hostname: hldm-state-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    volumes:
+      - data:/app/data
+    environment:
+      - BOT_TOKEN=AVAKADAKADABRA
+      - BOT_PERIOD=30
+
+volumes:
+  data:
+
+networks:
+  default:
+    external:
+      name: network
+```
+
+Create `.git/hooks/post-merge`
+
+```bash
+#!/bin/sh
+
+docker-compose up -d --build
+```
+
+And make it executable. Now you can run `git pull` to deploy from master
+
+
+Or you can automate with crontab.
+
+Run `crontab -e` and write schedule
+
+```bash
+*/15 * * * * git -C ~/docker-server/hldm-state-bot pull
 ```
