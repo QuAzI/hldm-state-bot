@@ -226,7 +226,11 @@ def remove_server_from_chat(message: telebot.types.Message):
                 if server_data.connection_info == connection_info:
                     settings.servers.remove(server_data)
                     bot.send_message(message.chat.id, "Server {}:{} removed".format(*connection_info))
-                    # TODO rm servers with no users from server_states
+                    
+                    chats_still_in_use = [s for s in settings_per_user.values() if server_data in s.servers]
+                    if len(chats_still_in_use) == 0:
+                        server_states.pop(connection_info)
+                    
                     return
 
             bot.send_message(message.chat.id, "Server not connected")
