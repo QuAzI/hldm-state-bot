@@ -190,9 +190,9 @@ def register_server_to_chat(message: telebot.types.Message):
         except Exception as err:
             print(err)
             bot.send_message(message.chat.id, "Please check settings")
-    elif message.chat.type == "private":
-        bot.set_state(message.from_user.id, MyStates.server, message.chat.id)
-        bot.send_message(message.chat.id, "Which hostname you want to monitor?")
+    #elif message.chat.type == "private":
+    #    bot.set_state(message.from_user.id, MyStates.server, message.chat.id)
+    #    bot.send_message(message.chat.id, "Which hostname you want to monitor?")
     else:
         bot.send_message(message.chat.id, "Use `/reg hostname port` to register server")
 
@@ -226,7 +226,7 @@ def remove_server_from_chat(message: telebot.types.Message):
         finally:
             save_settings()
     else:
-        bot.send_message(message.chat.id, "Please check parameters")
+        bot.send_message(message.chat.id, "Use `/del hostname port` to remove server")
 
 @bot.message_handler(state=MyStates.server)
 def get_name(message: telebot.types.Message):
