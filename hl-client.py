@@ -12,6 +12,7 @@ import datetime
 import time
 import json
 
+
 class MyStates(StatesGroup):
     server = State()
     port = State()
@@ -34,7 +35,7 @@ class ServerData:
 
 class UserSettings:
   chat_id: str = None
-  server: ServerData = None
+  servers: typing.List[ServerData] = []
 
   def __init__(self, chat_id):
     self.chat_id = chat_id
@@ -51,15 +52,18 @@ settings_per_user: typing.Dict[str, UserSettings] = {}
 server_states: typing.Dict[str, ServerData] = {}
 
 
-def get_settings(message) -> UserSettings:
-    user_settings = settings_per_user.get(message.chat.id)
+def get_chat_settings(message: telebot.types.Message) -> UserSettings:
+    return get_chat_settings(message.chat.id)
+
+def get_chat_settings(chat_id: str) -> UserSettings:
+    user_settings = settings_per_user.get(chat_id)
     if user_settings is None:
-        user_settings = UserSettings(message.chat.id)
-        settings_per_user[message.chat.id] = user_settings
+        user_settings = UserSettings(chat_id)
+        settings_per_user[chat_id] = user_settings
 
     return user_settings
 
-def get_server_state(connection_info) -> ServerData:
+def get_server_data(connection_info) -> ServerData:
     state = server_states.get(connection_info)
     if state is None:
         state = ServerData(connection_info)
@@ -96,29 +100,34 @@ def check_server_state(server_data: ServerData):
 
     return False
 
-def reply_server_state_for_user(message):
-    user_settings = get_settings(message)
-    if user_settings and user_settings.server:
-        server_data = user_settings.server
-
-        prev_state = server_data.last_state_message
-        check_server_state(server_data)
-        if prev_state != server_data.last_state_message and prev_state is not None:
-            send_new_server_state_for_subscribers(server_data)
-        else:
-           bot.send_message(
-               message.chat.id,
-               user_settings.server.last_state_message
-           )
+def reply_server_state_for_user(message: telebot.types.Message):
+    user_settings = get_chat_settings(message)
+    if user_settings and len(user_settings.servers) > 0:
+        for server_data in user_settings.servers:
+            prev_state = server_data.last_state_message
+            
+            check_server_state(server_data)
+            
+            if prev_state != server_data.last_state_message and prev_state is not None:
+                send_new_server_state_for_subscribers(server_data)
+            else:
+                bot.send_message(
+                    message.chat.id,
+                    server_data.last_state_message
+                )
     else:
         bot.send_message(message.chat.id, "Use `/reg hostname port` to register server")
 
-@bot.message_handler(commands=['start', 'reg', 'state'])
-def start(message):
-    if message.text.startswith('/reg'):
-        register_server(message)
+@bot.message_handler(commands=['start', 'reg', 'add', 'state', 'list', 'del'])
+def start(message: telebot.types.Message):
+    if message.text.startswith('/reg') or message.text.startswith('/add'):
+        register_server_to_chat(message)
     elif message.text.startswith("/state"):
         reply_server_state_for_user(message)
+    elif message.text.startswith("/list"):
+        list_servers_for_chat(message)
+    elif message.text.startswith("/del"):
+        remove_server_from_chat(message)
     else:
         bot.send_message(
             message.chat.id, 
@@ -127,25 +136,36 @@ def start(message):
             "Counter-Strike: Global Offensive, ARK: Survival Evolved, Rust)"
         )
 
+def chat_server_add(chat_id, server, port):
+    user_settings = get_chat_settings(chat_id)
+    settings_per_user[user_settings.chat_id] = user_settings
+
+    connection_info = (server, port)
+    server_state = get_server_data(connection_info)
+    if server_state not in user_settings.servers:
+        user_settings.servers.append(server_state)
+
 def load_settings():
     global settings_per_user
     try:
         if os.path.exists('data/user_data.json'):
             with open('data/user_data.json', 'r') as f:
-                settings: dict[str, tuple] = json.load(f)
-                for chat_id, (server, port) in settings.items():
-                    user_settings = UserSettings(int(chat_id))
-                    settings_per_user[user_settings.chat_id] = user_settings
-
-                    connection_info = (server, port)
-                    server_state = get_server_state(connection_info)
-                    user_settings.server = server_state
+                settings: dict[str, tuple | typing.List] = json.load(f)
+                for rec in settings.items():
+                    chat_id, server_params = rec
+                    if type(server_params[0]) is str:
+                        (server, port) = server_params
+                        chat_server_add(chat_id, server, port)
+                    else:
+                        chat_id, servers = rec
+                        for (server, port) in servers:
+                            chat_server_add(chat_id, server, port)
     except Exception as err:
         print(err)
 
 def save_settings():
     try:
-        settings = { item.chat_id:item.server.connection_info
+        settings = { item.chat_id:item.servers.connection_info
                      for item in settings_per_user.values() }
         json_data = json.dumps(settings)
 
@@ -157,14 +177,11 @@ def save_settings():
     except Exception as err:
         print(err)
 
-def register_server(message):
+def register_server_to_chat(message: telebot.types.Message):
     parts = message.text.split()[1:]
     if len(parts) == 2:
         try:
-            user_settings = get_settings(message)
-            connection_info = (parts[0], int(parts[1]))
-            server_state = get_server_state(connection_info)
-            user_settings.server = server_state
+            chat_server_add(message.chat.id, parts[0], int(parts[1]))
 
             bot.delete_state(message.chat.id, message.chat.id)
             reply_server_state_for_user(message)
@@ -179,8 +196,42 @@ def register_server(message):
     else:
         bot.send_message(message.chat.id, "Use `/reg hostname port` to register server")
 
+def get_chat_servers(settings: UserSettings) -> typing.List[ServerData]:
+    return [settings.servers]
+
+def list_servers_for_chat(message: telebot.types.Message):
+    settings = get_chat_settings(message)
+    servers = get_chat_servers(settings)
+    if len(servers) > 0:
+        servers_list = ", ".join([conn.connection_info for conn in servers])
+        bot.send_message(message.chat.id, "Observed servers: {}".format(servers_list))
+    else:
+        bot.send_message(message.chat.id, "No observed servers")
+
+def remove_server_from_chat(message: telebot.types.Message):
+    parts = message.text.split()[1:]
+    if len(parts) == 2:
+        try:
+            connection_info = (parts[0], int(parts[1]))
+            settings = get_chat_settings(message.chat.id)
+            for server_data in settings.servers:
+                if server_data.connection_info == connection_info:
+                    settings.servers.remove(server_data)
+                    bot.send_message(message.chat.id, "Server {} removed")
+                    # TODO rm servers with no users from server_states
+                    return
+
+            bot.send_message(message.chat.id, "Server not connected")
+        except Exception as err:
+            print(err)
+            bot.send_message(message.chat.id, "Please check parameters")
+        finally:
+            save_settings()
+    else:
+        bot.send_message(message.chat.id, "Please check parameters")
+
 @bot.message_handler(state=MyStates.server)
-def get_name(message):
+def get_name(message: telebot.types.Message):
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         # TODO validate
         data['server'] = message.text
@@ -189,15 +240,12 @@ def get_name(message):
     bot.send_message(message.chat.id, 'Port? [default=27015 for HL]')
 
 @bot.message_handler(state=MyStates.port, is_digit=True)
-def get_port(message):
+def get_port(message: telebot.types.Message):
     try:
         with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
             data['port'] = int(message.text)
             
-            user_settings = get_settings(message)
-            connection_info = (data['server'], data['port'])
-            server_state = get_server_state(connection_info)
-            user_settings.server = server_state
+            chat_server_add(message.chat.id, data['server'], data['port'])
 
         bot.delete_state(message.chat.id, message.chat.id)
         reply_server_state_for_user(message)
@@ -207,7 +255,7 @@ def get_port(message):
 
 # Any state
 @bot.message_handler(state="*", commands=['cancel'])
-def any_state(message):
+def any_state(message: telebot.types.Message):
     bot.send_message(message.chat.id, "Your state was cancelled.")
     bot.delete_state(message.chat.id, message.chat.id)
 
@@ -229,7 +277,7 @@ def check_server_state_and_notify(server_data: ServerData):
 def send_new_server_state_for_subscribers(server_data: ServerData):
     print('Send state {} {}'.format(server_data.connection_info, server_data.last_state_message))
     for chat_id, chat_settings in settings_per_user.items():
-        if chat_settings.server is server_data:
+        if server_data in chat_settings.servers:
             bot.send_message(
                 chat_id,
                 server_data.last_state_message
