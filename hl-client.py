@@ -49,9 +49,6 @@ settings_per_user: typing.Dict[str, UserSettings] = {}
 server_states: typing.Dict[str, ServerData] = {}
 
 
-def get_chat_settings(message: telebot.types.Message) -> UserSettings:
-    return get_chat_settings(message.chat.id)
-
 def get_chat_settings(chat_id: str) -> UserSettings:
     user_settings = settings_per_user.get(chat_id)
     if user_settings is None:
@@ -87,6 +84,11 @@ def check_server_state(server_data: ServerData):
                 server, state.game, state.map_name, state.player_count)
             server_data.last_check_passed_time = datetime.datetime.now()
             return True
+        except TimeoutError as err:
+            logger.error(err)
+            server_data.alive = False
+            server_data.last_state_message = "Server {}:{} check failed. Last time seen {}".format(
+                server, port, server_data.last_check_passed_time)
         except Exception as err:
             logger.error(str(err), exc_info=err)
             server_data.alive = False
@@ -98,7 +100,7 @@ def check_server_state(server_data: ServerData):
     return False
 
 def reply_server_state_for_user(message: telebot.types.Message):
-    user_settings = get_chat_settings(message)
+    user_settings = get_chat_settings(message.chat.id)
     if user_settings and len(user_settings.servers) > 0:
         for server_data in user_settings.servers:
             prev_state = server_data.last_state_message
@@ -201,7 +203,7 @@ def register_server_to_chat(message: telebot.types.Message):
         bot.send_message(message.chat.id, "Use `/reg hostname port` to register server")
 
 def list_servers_for_chat(message: telebot.types.Message):
-    settings = get_chat_settings(message)
+    settings = get_chat_settings(message.chat.id)
     if len(settings.servers) > 0:
         servers_list = ", ".join([
             "{}:{}".format(*s.connection_info) for s in settings.servers
