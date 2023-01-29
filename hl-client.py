@@ -19,8 +19,8 @@ class MyStates(StatesGroup):
 
 class ServerData:
     last_check_time: datetime = None
-    connection_info = None
-    last_state = None
+    connection_info: tuple[str, str] = None
+    last_state: a2s.SourceInfo = None
     last_state_message: str | None = None
     last_check_passed_time: datetime = None
     alive: bool = False
@@ -74,7 +74,7 @@ def get_server_data(connection_info) -> ServerData:
 
 def check_server_state(server_data: ServerData):
     server_data.last_check_time = datetime.datetime.now()
-    server, _ = server_data.connection_info
+    server, port = server_data.connection_info
     retry_num = 0
     while retry_num < 3:
         retry_num += 1
@@ -92,8 +92,8 @@ def check_server_state(server_data: ServerData):
             return True
         except Exception as err:
             server_data.alive = False
-            server_data.last_state_message = "Server {} check failed. Last time seen {}".format(
-                server, server_data.last_check_passed_time)
+            server_data.last_state_message = "Server {}:{} check failed. Last time seen {}".format(
+                server, port, server_data.last_check_passed_time)
             print(err)
         finally:
             print(server_data.last_state_message)
@@ -196,14 +196,12 @@ def register_server_to_chat(message: telebot.types.Message):
     else:
         bot.send_message(message.chat.id, "Use `/reg hostname port` to register server")
 
-def get_chat_servers(settings: UserSettings) -> typing.List[ServerData]:
-    return [settings.servers]
-
 def list_servers_for_chat(message: telebot.types.Message):
     settings = get_chat_settings(message)
-    servers = get_chat_servers(settings)
-    if len(servers) > 0:
-        servers_list = ", ".join([conn.connection_info for conn in servers])
+    if len(settings.servers) > 0:
+        servers_list = ", ".join([
+            "{}:{}".format(*s.connection_info) for s in settings.servers
+            ])
         bot.send_message(message.chat.id, "Observed servers: {}".format(servers_list))
     else:
         bot.send_message(message.chat.id, "No observed servers")
@@ -217,7 +215,7 @@ def remove_server_from_chat(message: telebot.types.Message):
             for server_data in settings.servers:
                 if server_data.connection_info == connection_info:
                     settings.servers.remove(server_data)
-                    bot.send_message(message.chat.id, "Server {} removed")
+                    bot.send_message(message.chat.id, "Server {}:{} removed".format(*connection_info))
                     # TODO rm servers with no users from server_states
                     return
 
