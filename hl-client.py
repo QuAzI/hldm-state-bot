@@ -30,7 +30,7 @@ class ServerData:
         self.alive = False
 
 class UserSettings:
-  chat_id: str = None
+  chat_id: int = None
   servers: typing.List[ServerData] = []
 
   def __init__(self, chat_id):
@@ -45,11 +45,11 @@ settings_file = 'data/user_data.json'
 state_storage = StateMemoryStorage()  # replace with Redis?
 bot = telebot.TeleBot(token, state_storage=state_storage)
 
-settings_per_user: typing.Dict[str, UserSettings] = {}
-server_states: typing.Dict[str, ServerData] = {}
+settings_per_user: typing.Dict[int, UserSettings] = {}
+server_states: typing.Dict[tuple[str, str], ServerData] = {}
 
 
-def get_chat_settings(chat_id: str) -> UserSettings:
+def get_chat_settings(chat_id: int) -> UserSettings:
     user_settings = settings_per_user.get(chat_id)
     if user_settings is None:
         logger.info(f'New chat: {chat_id=}')
@@ -139,7 +139,7 @@ def start(message: telebot.types.Message):
             "Counter-Strike: Global Offensive, ARK: Survival Evolved, Rust)"
         )
 
-def chat_server_add(chat_id, server, port):
+def chat_server_add(chat_id: int, server: str, port: int):
     logger.info(f'New observer: {chat_id=}, {server=}, {port=}')
     user_settings = get_chat_settings(chat_id)
 
@@ -159,11 +159,11 @@ def load_settings():
                     chat_id, server_params = rec
                     if type(server_params[0]) is str:
                         (server, port) = server_params
-                        chat_server_add(chat_id, server, port)
+                        chat_server_add(int(chat_id), server, int(port))
                     else:
                         chat_id, servers = rec
                         for (server, port) in servers:
-                            chat_server_add(chat_id, server, port)
+                            chat_server_add(int(chat_id), server, int(port))
     except Exception as err:
         logger.error(str(err), exc_info=err)
 
@@ -238,7 +238,7 @@ def remove_server_from_chat(message: telebot.types.Message):
         bot.send_message(message.chat.id, "Use `/del hostname port` to remove server")
 
 def check_available_servers():
-    logger.info('Check Servers cycle: {} servers, {} users'.format(len(server_states), len(settings_per_user)))
+    logger.info('Check Servers cycle: {} servers for {} chats'.format(len(server_states), len(settings_per_user)))
     for server_data in server_states.values():
         check_server_state_and_notify(server_data)
 
@@ -254,15 +254,16 @@ def check_server_state_and_notify(server_data: ServerData):
 
 def send_new_server_state_for_subscribers(server_data: ServerData):
     logger.info('Send state: {}'.format(server_data.last_state_message))
-    for chat_id, chat_settings in settings_per_user.items():
-        if server_data in chat_settings.servers:
-            try:
-                bot.send_message(
-                    chat_id,
-                    server_data.last_state_message
-                )
-            except Exception as err:
-                logger.error('Error in chat {}: {}'.format(chat_id, err), exc_info=err)
+    for chat_settings in settings_per_user.values():
+        for server in chat_settings.servers:
+            if server_data.connection_info == server.connection_info:
+                try:
+                    bot.send_message(
+                        chat_settings.chat_id,
+                        server_data.last_state_message
+                    )
+                except Exception as err:
+                    logger.error('Error in chat {}: {}'.format(chat_settings.chat_id, err), exc_info=err)
 
 async def server_state_cycle():
     while True:
