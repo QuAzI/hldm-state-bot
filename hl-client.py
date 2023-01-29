@@ -138,7 +138,6 @@ def start(message: telebot.types.Message):
 
 def chat_server_add(chat_id, server, port):
     user_settings = get_chat_settings(chat_id)
-    settings_per_user[user_settings.chat_id] = user_settings
 
     connection_info = (server, port)
     server_state = get_server_data(connection_info)
@@ -178,6 +177,11 @@ def save_settings():
         print(err)
 
 def register_server_to_chat(message: telebot.types.Message):
+    user_settings = get_chat_settings(message.chat.id)
+    if len(user_settings.servers) > 16:
+        bot.send_message(message.chat.id, "Don't be greedy!")
+        return
+
     parts = message.text.split()[1:]
     if len(parts) == 2:
         try:
