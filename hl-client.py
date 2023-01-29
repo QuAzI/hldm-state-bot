@@ -88,7 +88,7 @@ def check_server_state(server_data: ServerData):
             server_data.last_check_passed_time = datetime.datetime.now()
             return True
         except Exception as err:
-            logger.error(str(err), exc_info=error)
+            logger.error(str(err), exc_info=err)
             server_data.alive = False
             server_data.last_state_message = "Server {}:{} check failed. Last time seen {}".format(
                 server, port, server_data.last_check_passed_time)
@@ -160,7 +160,7 @@ def load_settings():
                         for (server, port) in servers:
                             chat_server_add(chat_id, server, port)
     except Exception as err:
-        logger.error(str(err), exc_info=error)
+        logger.error(str(err), exc_info=err)
 
 def save_settings():
     try:
@@ -177,7 +177,7 @@ def save_settings():
         with open(settings_file, 'w') as f:
             f.write(json_data)
     except Exception as err:
-        logger.error(str(err), exc_info=error)
+        logger.error(str(err), exc_info=err)
 
 def register_server_to_chat(message: telebot.types.Message):
     user_settings = get_chat_settings(message.chat.id)
@@ -195,7 +195,7 @@ def register_server_to_chat(message: telebot.types.Message):
 
             save_settings()
         except Exception as err:
-            logger.error(str(err), exc_info=error)
+            logger.error(str(err), exc_info=err)
             bot.send_message(message.chat.id, "Please check settings")
     else:
         bot.send_message(message.chat.id, "Use `/reg hostname port` to register server")
@@ -225,7 +225,7 @@ def remove_server_from_chat(message: telebot.types.Message):
 
             bot.send_message(message.chat.id, "Server not connected")
         except Exception as err:
-            logger.error(str(err), exc_info=error)
+            logger.error(str(err), exc_info=err)
             bot.send_message(message.chat.id, "Please check parameters")
         finally:
             save_settings()
@@ -245,7 +245,7 @@ def check_server_state_and_notify(server_data: ServerData):
         if prev_state != server_data.last_state_message:
             send_new_server_state_for_subscribers(server_data)
     except Exception as err:
-        logger.error(str(err), exc_info=error)
+        logger.error(str(err), exc_info=err)
 
 def send_new_server_state_for_subscribers(server_data: ServerData):
     logger.info('Send state {} {}'.format(server_data.connection_info, server_data.last_state_message))
@@ -257,7 +257,7 @@ def send_new_server_state_for_subscribers(server_data: ServerData):
                     server_data.last_state_message
                 )
             except Exception as err:
-                logger.error('Error in chat {}: {}'.format(chat_id, err), exc_info=error)
+                logger.error('Error in chat {}: {}'.format(chat_id, err), exc_info=err)
 
 async def server_state_cycle():
     while True:
@@ -293,5 +293,5 @@ if __name__ == "__main__":
         load_settings()
         start_server_state_scheduler()
         start_bot_processing()
-    except Exception as error:
-        logger.fatal(str(error), exc_info=error)
+    except Exception as err:
+        logger.fatal(str(err), exc_info=err)
