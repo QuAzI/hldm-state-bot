@@ -178,8 +178,8 @@ def save_settings():
 
 def register_server_to_chat(message: telebot.types.Message):
     user_settings = get_chat_settings(message.chat.id)
-    if len(user_settings.servers) > 16:
-        bot.send_message(message.chat.id, "Don't be greedy!")
+    if len(user_settings.servers) >= 16:
+        bot.send_message(message.chat.id, "Don't be so greedy!")
         return
 
     parts = message.text.split()[1:]
