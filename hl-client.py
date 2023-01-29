@@ -31,10 +31,11 @@ class ServerData:
 
 class UserSettings:
   chat_id: int = None
-  servers: typing.List[ServerData] = []
+  servers: typing.List[ServerData]
 
   def __init__(self, chat_id):
     self.chat_id = chat_id
+    self.servers = []
 
 
 load_dotenv()
