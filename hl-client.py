@@ -52,6 +52,7 @@ server_states: typing.Dict[str, ServerData] = {}
 def get_chat_settings(chat_id: str) -> UserSettings:
     user_settings = settings_per_user.get(chat_id)
     if user_settings is None:
+        logger.info(f'New chat: {chat_id=}')
         user_settings = UserSettings(chat_id)
         settings_per_user[chat_id] = user_settings
 
@@ -60,6 +61,7 @@ def get_chat_settings(chat_id: str) -> UserSettings:
 def get_server_data(connection_info) -> ServerData:
     state = server_states.get(connection_info)
     if state is None:
+        logger.info(f'New server: {connection_info=}')
         state = ServerData(connection_info)
         server_states[connection_info] = state
     
@@ -74,7 +76,7 @@ def check_server_state(server_data: ServerData):
         retry_num += 1
         if retry_num > 1:
             time.sleep(5)
-            logger.warn('Check state: {} iter {}'.format(server_data.connection_info, retry_num))
+            logger.warning('Check state: {} iter {}'.format(server_data.connection_info, retry_num))
 
         try:
             state = a2s.info(server_data.connection_info, timeout=15)
@@ -95,7 +97,7 @@ def check_server_state(server_data: ServerData):
             server_data.last_state_message = "Server {}:{} check failed. Last time seen {}".format(
                 server, port, server_data.last_check_passed_time)
         finally:
-            logger.info(server_data.last_state_message)
+            logger.debug(server_data.last_state_message)
 
     return False
 
@@ -138,6 +140,7 @@ def start(message: telebot.types.Message):
         )
 
 def chat_server_add(chat_id, server, port):
+    logger.info(f'New observer: {chat_id=}, {server=}, {port=}')
     user_settings = get_chat_settings(chat_id)
 
     connection_info = (server, port)
@@ -250,7 +253,7 @@ def check_server_state_and_notify(server_data: ServerData):
         logger.error(str(err), exc_info=err)
 
 def send_new_server_state_for_subscribers(server_data: ServerData):
-    logger.info('Send state {} {}'.format(server_data.connection_info, server_data.last_state_message))
+    logger.info('Send state: {}'.format(server_data.last_state_message))
     for chat_id, chat_settings in settings_per_user.items():
         if server_data in chat_settings.servers:
             try:
