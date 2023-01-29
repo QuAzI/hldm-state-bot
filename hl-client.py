@@ -29,7 +29,7 @@ class ServerData:
         self.last_check_passed_time = None
         self.alive = False
 
-class UserSettings:
+class ChatSettings:
   chat_id: int = None
   servers: typing.List[ServerData]
 
@@ -46,18 +46,18 @@ settings_file = 'data/user_data.json'
 state_storage = StateMemoryStorage()  # replace with Redis?
 bot = telebot.TeleBot(token, state_storage=state_storage)
 
-settings_per_user: typing.Dict[int, UserSettings] = {}
+settings_per_chat: typing.Dict[int, ChatSettings] = {}
 server_states: typing.Dict[tuple[str, str], ServerData] = {}
 
 
-def get_chat_settings(chat_id: int) -> UserSettings:
-    user_settings = settings_per_user.get(chat_id)
-    if user_settings is None:
+def get_chat_settings(chat_id: int) -> ChatSettings:
+    chat_settings = settings_per_chat.get(chat_id)
+    if chat_settings is None:
         logger.info(f'New chat: {chat_id=}')
-        user_settings = UserSettings(chat_id)
-        settings_per_user[chat_id] = user_settings
+        chat_settings = ChatSettings(chat_id)
+        settings_per_chat[chat_id] = chat_settings
 
-    return user_settings
+    return chat_settings
 
 def get_server_data(connection_info) -> ServerData:
     state = server_states.get(connection_info)
@@ -103,9 +103,9 @@ def check_server_state(server_data: ServerData):
     return False
 
 def reply_server_state_for_user(message: telebot.types.Message):
-    user_settings = get_chat_settings(message.chat.id)
-    if user_settings and len(user_settings.servers) > 0:
-        for server_data in user_settings.servers:
+    chat_settings = get_chat_settings(message.chat.id)
+    if chat_settings and len(chat_settings.servers) > 0:
+        for server_data in chat_settings.servers:
             prev_state = server_data.last_state_message
             
             check_server_state(server_data)
@@ -142,15 +142,15 @@ def start(message: telebot.types.Message):
 
 def chat_server_add(chat_id: int, server: str, port: int):
     logger.info(f'New observer: {chat_id=}, {server=}, {port=}')
-    user_settings = get_chat_settings(chat_id)
+    chat_settings = get_chat_settings(chat_id)
 
     connection_info = (server, port)
     server_state = get_server_data(connection_info)
-    if server_state not in user_settings.servers:
-        user_settings.servers.append(server_state)
+    if server_state not in chat_settings.servers:
+        chat_settings.servers.append(server_state)
 
 def load_settings():
-    global settings_per_user
+    global settings_per_chat
     try:
         if os.path.exists(settings_file):
             logger.info(f'Load {settings_file}');
@@ -172,7 +172,7 @@ def save_settings():
     try:
         settings = { 
             item.chat_id:[s.connection_info for s in item.servers]
-            for item in settings_per_user.values() 
+            for item in settings_per_chat.values() 
         }
         
         json_data = json.dumps(settings)
@@ -186,8 +186,8 @@ def save_settings():
         logger.error(str(err), exc_info=err)
 
 def register_server_to_chat(message: telebot.types.Message):
-    user_settings = get_chat_settings(message.chat.id)
-    if len(user_settings.servers) >= 16:
+    chat_settings = get_chat_settings(message.chat.id)
+    if len(chat_settings.servers) >= 16:
         bot.send_message(message.chat.id, "Don't be so greedy!")
         return
 
@@ -227,7 +227,7 @@ def remove_server_from_chat(message: telebot.types.Message):
                     settings.servers.remove(server_data)
                     bot.send_message(message.chat.id, "Server {}:{} removed".format(*connection_info))
                     
-                    chats_still_in_use = [s for s in settings_per_user.values() if server_data in s.servers]
+                    chats_still_in_use = [s for s in settings_per_chat.values() if server_data in s.servers]
                     if len(chats_still_in_use) == 0:
                         server_states.pop(connection_info)
                     
@@ -243,8 +243,8 @@ def remove_server_from_chat(message: telebot.types.Message):
         bot.send_message(message.chat.id, "Use `/del hostname port` to remove server")
 
 def check_available_servers():
-    logger.info('Check Servers cycle: {} servers for {} chats'.format(len(server_states), len(settings_per_user)))
-    for server_data in server_states.values():
+    logger.info('Check Servers cycle: {} servers for {} chats'.format(len(server_states), len(settings_per_chat)))
+    for server_data in list(server_states.values()):
         check_server_state_and_notify(server_data)
 
 def check_server_state_and_notify(server_data: ServerData):
@@ -259,7 +259,7 @@ def check_server_state_and_notify(server_data: ServerData):
 
 def send_new_server_state_for_subscribers(server_data: ServerData):
     logger.info('Send state: {}'.format(server_data.last_state_message))
-    for chat_settings in settings_per_user.values():
+    for chat_settings in settings_per_chat.values():
         for server in chat_settings.servers:
             if server_data.connection_info == server.connection_info:
                 try:
