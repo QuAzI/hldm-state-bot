@@ -72,6 +72,11 @@ services:
       - BOT_TOKEN=AVAKADAKADABRA
       - BOT_PERIOD=30
     restart: on-failure:7
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 200M
 
 volumes:
   data:
