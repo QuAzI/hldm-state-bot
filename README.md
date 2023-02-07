@@ -71,6 +71,7 @@ services:
     environment:
       - BOT_TOKEN=AVAKADAKADABRA
       - BOT_PERIOD=30
+    restart: always
 
 volumes:
   data:
